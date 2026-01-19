@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- PWA Meta Tags für echtes App-Feeling -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Rechner">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <title>Rechner Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap');
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #000;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        /* Taschenrechner Design */
+        #calc-wrapper {
+            width: 100%;
+            max-width: 400px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 20px 20px calc(40px + env(safe-area-inset-bottom));
+            background: #000;
+        }
+
+        .calc-display {
+            font-size: 5rem;
+            text-align: right;
+            padding: 0 10px 20px 10px;
+            font-weight: 300;
+            min-height: 120px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: flex-end;
+            word-break: break-all;
+            line-height: 1;
+        }
+
+        .btn-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+        }
+
+        .btn {
+            aspect-ratio: 1;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.2rem;
+            cursor: pointer;
+            transition: filter 0.1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .btn:active { filter: brightness(1.6); }
+        .btn-gray { background: #a5a5a5; color: black; }
+        .btn-dark { background: #333; color: white; }
+        .btn-orange { background: #ff9f0a; color: white; }
+        .btn-zero { grid-column: span 2; aspect-ratio: auto; border-radius: 50px; justify-content: flex-start; padding-left: 35px; }
+
+        /* Spiel Design */
+        #game-view {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: #4ec0ca;
+            z-index: 9999;
+            touch-action: none;
+        }
+
+        #menu {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+        }
+
+        .score-box {
+            position: absolute;
+            top: env(safe-area-inset-top, 50px);
+            width: 100%;
+            text-align: center;
+            font-size: 5rem;
+            font-weight: 900;
+            text-shadow: 4px 4px 0 #000;
+            z-index: 10000;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Taschenrechner -->
+    <div id="calc-wrapper">
+        <div id="display" class="calc-display">0</div>
+        <div class="btn-grid">
+            <div class="btn btn-gray" onclick="reset()">AC</div>
+            <div class="btn btn-gray" onclick="misc('+/-')">+/-</div>
+            <div class="btn btn-gray" onclick="misc('%')">%</div>
+            <div class="btn btn-orange" onclick="op('/')">÷</div>
+
+            <div class="btn btn-dark" onclick="press('7')">7</div>
+            <div class="btn btn-dark" onclick="press('8')">8</div>
+            <div class="btn btn-dark" onclick="press('9')">9</div>
+            <div class="btn btn-orange" onclick="op('*')">×</div>
+
+            <div class="btn btn-dark" onclick="press('4')">4</div>
+            <div class="btn btn-dark" onclick="press('5')">5</div>
+            <div class="btn btn-dark" onclick="press('6')">6</div>
+            <div class="btn btn-orange" onclick="op('-')">-</div>
+
+            <div class="btn btn-dark" onclick="press('1')">1</div>
+            <div class="btn btn-dark" onclick="press('2')">2</div>
+            <div class="btn btn-dark" onclick="press('3')">3</div>
+            <div class="btn btn-orange" onclick="op('+')">+</div>
+
+            <div class="btn btn-dark btn-zero" onclick="press('0')">0</div>
+            <div class="btn btn-dark" onclick="press('.')">,</div>
+            <div class="btn btn-orange" onclick="solve()">=</div>
+        </div>
+    </div>
+
+    <!-- Spiel -->
+    <div id="game-view">
+        <div id="score-text" class="score-box">0</div>
+        <div id="menu">
+            <div class="bg-white text-black p-10 rounded-[45px] text-center shadow-2xl w-[80%] border-[6px] border-black">
+                <h1 class="text-5xl font-black mb-1 italic">FLAPPY</h1>
+                <p id="hs-label" class="text-orange-500 font-bold mb-8 text-xl">Best: 0</p>
+                <button onclick="start()" class="bg-orange-500 text-white w-full py-5 rounded-3xl font-black text-2xl shadow-xl active:scale-95 transition-transform">START</button>
+                <button onclick="exitGame()" class="block w-full mt-6 text-gray-400 font-bold uppercase text-xs tracking-widest">Rechner öffnen</button>
+            </div>
+        </div>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        // --- RECHNER ---
+        let input = "0";
+        const disp = document.getElementById('display');
+
+        function render() {
+            disp.innerText = input.replace(/\*/g, '×').replace(/\//g, '÷').replace(/\./g, ',');
+            disp.style.fontSize = input.length > 6 ? "3.5rem" : "5.5rem";
+        }
+
+        function press(n) {
+            if (input === "0") input = n; else input += n;
+            render();
+        }
+
+        function op(o) {
+            const l = input.slice(-1);
+            if (['+','-','*','/'].includes(l)) input = input.slice(0,-1) + o;
+            else input += o;
+            render();
+        }
+
+        function reset() { input = "0"; render(); }
+
+        function misc(m) {
+            if (m === '%') input = (parseFloat(input)/100).toString();
+            else if (m === '+/-') input = input.startsWith('-') ? input.slice(1) : '-' + input;
+            render();
+        }
+
+        function solve() {
+            if (input === "67") { showGame(); return; }
+            try { input = eval(input).toString(); render(); } 
+            catch { input = "Fehler"; render(); setTimeout(reset, 1000); }
+        }
+
+        // --- SPIEL ---
+        const gView = document.getElementById('game-view');
+        const cvs = document.getElementById('canvas');
+        const ctx = cvs.getContext('2d');
+        const menu = document.getElementById('menu');
+        const hsLabel = document.getElementById('hs-label');
+        const scLabel = document.getElementById('score-text');
+
+        let b, pipes, sc, hs, live, fr, req;
+
+        hs = localStorage.getItem('fb_best') || 0;
+        hsLabel.innerText = `Best: ${hs}`;
+
+        function showGame() {
+            gView.style.display = 'block';
+            cvs.width = window.innerWidth;
+            cvs.height = window.innerHeight;
+            menu.style.display = 'flex';
+        }
+
+        function exitGame() {
+            gView.style.display = 'none';
+            live = false;
+            cancelAnimationFrame(req);
+            reset();
+        }
+
+        function start() {
+            b = { x: 60, y: cvs.height/2, v: 0, r: 18 };
+            pipes = []; sc = 0; fr = 0; live = true;
+            menu.style.display = 'none';
+            scLabel.innerText = "0";
+            if(req) cancelAnimationFrame(req);
+            tick();
+        }
+
+        function tick() {
+            if (!live) return;
+            ctx.fillStyle = '#4ec0ca';
+            ctx.fillRect(0,0,cvs.width, cvs.height);
+
+            b.v += 0.32;
+            b.y += b.v;
+
+            // Bird
+            ctx.fillStyle = '#f1c40f';
+            ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.stroke();
+
+            if (fr % 95 === 0) {
+                let gap = 175;
+                let h = Math.random() * (cvs.height - 400) + 120;
+                pipes.push({ x: cvs.width, t: h, b: h + gap, s: false });
+            }
+
+            for (let i = pipes.length - 1; i >= 0; i--) {
+                let p = pipes[i];
+                p.x -= 4;
+
+                ctx.fillStyle = '#2ecc71';
+                ctx.fillRect(p.x, 0, 75, p.t);
+                ctx.strokeRect(p.x, -5, 75, p.t + 5);
+                ctx.fillRect(p.x, p.b, 75, cvs.height - p.b);
+                ctx.strokeRect(p.x, p.b, 75, cvs.height - p.b + 5);
+
+                if (b.x + b.r - 5 > p.x && b.x - b.r + 5 < p.x + 75) {
+                    if (b.y - b.r + 5 < p.t || b.y + b.r - 5 > p.b) end();
+                }
+
+                if (!p.s && p.x + 37 < b.x) {
+                    sc++; scLabel.innerText = sc; p.s = true;
+                }
+                if (p.x < -100) pipes.splice(i, 1);
+            }
+
+            if (b.y + b.r > cvs.height || b.y < 0) end();
+
+            fr++;
+            req = requestAnimationFrame(tick);
+        }
+
+        function end() {
+            live = false;
+            cancelAnimationFrame(req);
+            if (sc > hs) { hs = sc; localStorage.setItem('fb_best', hs); }
+            hsLabel.innerText = `Best: ${hs}`;
+            menu.style.display = 'flex';
+        }
+
+        function jump(e) { 
+            if(live) { b.v = -7; if(e) e.preventDefault(); }
+        }
+
+        window.addEventListener('touchstart', jump, {passive: false});
+        window.addEventListener('mousedown', jump);
+        window.addEventListener('keydown', (e) => { if(e.code === 'Space') jump(); });
+
+    </script>
+</body>
+</html>
+
+
